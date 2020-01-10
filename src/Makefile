@@ -30,7 +30,8 @@ CLEANFILES := numactl.o libnuma.o numactl numademo numademo.o distance.o \
 	      .depend .depend.X test/nodemap test/distance test/tbitmap \
 	      test/after test/before threadtest test_move_pages \
 	      test/mbind_mig_pages test/migrate_pages \
-	      migratepages migspeed migspeed.o libnuma.a
+	      migratepages migspeed migspeed.o libnuma.a \
+	      test/move_pages test/realloc_test
 SOURCES := bitops.c libnuma.c distance.c memhog.c numactl.c numademo.c \
 	numamon.c shm.c stream_lib.c stream_main.c syscall.c util.c mt.c \
 	clearcache.c test/*.c
@@ -42,7 +43,7 @@ docdir := ${prefix}/share/doc
 all: numactl migratepages migspeed libnuma.so numademo numamon memhog \
      test/tshared stream test/mynode test/pagesize test/ftok test/prefered \
      test/randmap test/nodemap test/distance test/tbitmap test/move_pages \
-     test/mbind_mig_pages test/migrate_pages libnuma.a
+     test/mbind_mig_pages test/migrate_pages test/realloc_test libnuma.a
 
 numactl: numactl.o util.o shm.o bitops.o libnuma.so
 
@@ -81,7 +82,7 @@ stream_main.o: stream_main.c
 libnuma.so.1: versions.ldscript
 
 libnuma.so.1: libnuma.o syscall.o distance.o
-	${CC} ${LDFLAGS} -shared -Wl,-soname=libnuma.so.1 -Wl,--version-script,versions.ldscript -Wl,-init,numa_init -o libnuma.so.1 $(filter-out versions.ldscript,$^)
+	${CC} ${LDFLAGS} -shared -Wl,-soname=libnuma.so.1 -Wl,--version-script,versions.ldscript -Wl,-init,numa_init -Wl,-fini,numa_fini -o libnuma.so.1 $(filter-out versions.ldscript,$^)
 
 libnuma.so: libnuma.so.1
 	ln -sf libnuma.so.1 libnuma.so
@@ -121,6 +122,8 @@ test/move_pages: test/move_pages.c libnuma.so
 test/mbind_mig_pages: test/mbind_mig_pages.c libnuma.so
 
 test/migrate_pages: test/migrate_pages.c libnuma.so
+
+test/realloc_test: test/realloc_test.c libnuma.so
 
 .PHONY: install all clean html depend
 

@@ -1,17 +1,19 @@
 Name:		numactl
 Summary:	Library for tuning for Non Uniform Memory Access machines
-Version:	2.0.3
-Release:	9%{dist}
+Version:	2.0.7
+Release:	3%{dist}
 License:	LGPLv2/GPLv2
 Group: 		System Environment/Base
 URL:		ftp://oss.sgi.com/www/projects/libnuma/download
 Source0:	ftp://oss.sgi.com/www/projects/libnuma/download/numactl-%{version}.tar.gz
 Buildroot:	%{_tmppath}/%{name}-buildroot
 
-Patch0: numactl-2.0.3-rc3-distance_parsing.patch
-Patch1: numactl-2.0.3-rc3-no-nodes-warning.patch
-Patch2: numactl-2.0.3-nodes_allowed_list_obo.patch
-Patch3: numactl-2.0.3-dso-destructor.patch
+Patch0: numactl-2.0.7-distance-parsing.patch
+Patch1: numactl-2.0.7-no-nodes-warning.patch
+Patch2: numactl-2.0.7-numademo-msize-check.patch
+Patch3: numactl-2.0.7-numademo-alloc.patch
+Patch4: numactl-2.0.7-manpages.patch
+Patch5: numactl-2.0.7-nodes_allowed_list.patch
 
 ExcludeArch: s390 s390x
 
@@ -34,6 +36,8 @@ Provides development headers for numa library calls
 %patch1 -p1
 %patch2 -p1
 %patch3 -p1
+%patch4 -p1
+%patch5 -p1
 
 %build
 make CFLAGS="$RPM_OPT_FLAGS -I."
@@ -75,6 +79,16 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/man3/*.3*
 
 %changelog
+* Thu Mar 22 2012 Anton Arapov <anton@rehdat.com> - 2.0.7-3
+- Bring back the legacy export to prevent the ABI change.
+
+* Wed Feb 15 2012 Petr Holasek <pholasek@redhat.com> - 2.0.7-1
+- Rebase to 2.0.7
+- Fixes for numademo segfaults (bz 784501, bz 707138)
+
+* Mon Jan 02 2012 Anton Arapov <aarapov@redhat.com> - 2.0.3-10
+- Add missing manpages (bz 751764)
+
 * Thu Jun 17 2010 Neil Horman <nhorman@redhat.com> - 2.0.3-9
 - Fix dist tag (bz 604556)
 

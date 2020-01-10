@@ -87,6 +87,7 @@ libnuma_1.2 {
     numa_alloc_interleaved_subset;
     numa_alloc_local;
     numa_alloc_onnode;
+    numa_realloc;
     numa_allocate_cpumask;
     numa_allocate_nodemask;
     numa_available;
@@ -100,6 +101,7 @@ libnuma_1.2 {
     numa_bitmask_nbytes;
     numa_bitmask_setall;
     numa_bitmask_setbit;
+    numa_bitmask_weight;
     numa_distance;
     numa_error;
     numa_exit_on_error;
@@ -119,11 +121,14 @@ libnuma_1.2 {
     numa_node_size;
     numa_node_to_cpus;
     numa_node_of_cpu;
+    numa_nodes_ptr;
     numa_num_configured_cpus;
     numa_num_configured_nodes;
     numa_num_possible_nodes;
     numa_num_task_cpus;
     numa_num_task_nodes;
+    numa_num_thread_cpus;
+    numa_num_thread_nodes;
     numa_pagesize;
     numa_parse_bitmap;
     numa_parse_cpustring;
@@ -144,7 +149,6 @@ libnuma_1.2 {
     numa_tonode_memory;
     numa_tonodemask_memory;
     numa_warn;
-    nodes_allowed_list;
   local:
     *;
 } libnuma_1.1;

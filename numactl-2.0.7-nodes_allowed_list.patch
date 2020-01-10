@@ -1,0 +1,45 @@
+diff -up numactl-2.0.7/libnuma.c.nodes_allowed_list numactl-2.0.7/libnuma.c
+--- numactl-2.0.7/libnuma.c.nodes_allowed_list	2012-03-22 12:40:23.000000000 +0100
++++ numactl-2.0.7/libnuma.c	2012-03-22 12:48:49.000000000 +0100
+@@ -56,6 +56,8 @@ static struct bitmask *numa_memnode_ptr
+ static unsigned long *node_cpu_mask_v1[NUMA_NUM_NODES];
+ struct bitmask **node_cpu_mask_v2;
+ 
++char *nodes_allowed_list = NULL;
++
+ WEAK void numa_error(char *where);
+ 
+ #ifdef __thread
+@@ -108,6 +110,8 @@ numa_fini(void)
+ 		numa_bitmask_free(numa_memnode_ptr);
+ 	if (numa_nodes_ptr)
+ 		numa_bitmask_free(numa_nodes_ptr);
++	if (nodes_allowed_list)
++		free(nodes_allowed_list);
+ }
+ 
+ /*
+@@ -486,6 +490,12 @@ set_task_constraints(void)
+ 		if (strncmp(buffer,"Mems_allowed:",13) == 0) {
+ 			numprocnode = read_mask(mask, numa_all_nodes_ptr);
+ 		}
++		if (strncmp(buffer,"Mems_allowed_list:",18) == 0) {
++			nodes_allowed_list = malloc(strlen(buffer)-18);
++			strncpy(nodes_allowed_list, buffer + 19,
++				strlen(buffer) - 19);
++			nodes_allowed_list[strlen(buffer)-20] = '\0';
++		}
+ 	}
+ 	fclose(f);
+ 	free(buffer);
+diff -up numactl-2.0.7/versions.ldscript.nodes_allowed_list numactl-2.0.7/versions.ldscript
+--- numactl-2.0.7/versions.ldscript.nodes_allowed_list	2012-03-22 13:27:43.414297914 +0100
++++ numactl-2.0.7/versions.ldscript	2012-03-22 13:28:11.856298341 +0100
+@@ -149,6 +149,7 @@ libnuma_1.2 {
+     numa_tonode_memory;
+     numa_tonodemask_memory;
+     numa_warn;
++    nodes_allowed_list;
+   local:
+     *;
+ } libnuma_1.1;

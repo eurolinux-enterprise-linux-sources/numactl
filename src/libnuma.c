@@ -51,10 +51,10 @@ struct bitmask *numa_all_cpus_ptr = NULL;
    of numa_no_nodes and numa_all_nodes, but the loader does not correctly
    handle versioning of BSS versus small data items */
 
+struct bitmask *numa_nodes_ptr = NULL;
+static struct bitmask *numa_memnode_ptr = NULL;
 static unsigned long *node_cpu_mask_v1[NUMA_NUM_NODES];
 struct bitmask **node_cpu_mask_v2;
-
-char *nodes_allowed_list = NULL;
 
 WEAK void numa_error(char *where);
 
@@ -67,8 +67,8 @@ static __thread unsigned int mbind_flags = 0;
 static int sizes_set=0;
 static int maxconfigurednode = -1;
 static int maxconfiguredcpu = -1;
-static int maxprocnode = -1;
-static int maxproccpu = -1;
+static int numprocnode = -1;
+static int numproccpu = -1;
 static int nodemask_sz = 0;
 static int cpumask_sz = 0;
 
@@ -93,6 +93,21 @@ numa_init(void)
         for (i = 0; i < max; i++)
                 nodemask_set_compat((nodemask_t *)&numa_all_nodes, i);
 	memset(&numa_no_nodes, 0, sizeof(numa_no_nodes));
+}
+
+void
+numa_fini(void)
+{
+	if (numa_all_cpus_ptr)
+		numa_bitmask_free(numa_all_cpus_ptr);
+	if (numa_all_nodes_ptr)
+		numa_bitmask_free(numa_all_nodes_ptr);
+	if (numa_no_nodes_ptr)
+		numa_bitmask_free(numa_no_nodes_ptr);
+	if (numa_memnode_ptr)
+		numa_bitmask_free(numa_memnode_ptr);
+	if (numa_nodes_ptr)
+		numa_bitmask_free(numa_nodes_ptr);
 }
 
 /*
@@ -215,6 +230,18 @@ numa_bitmask_equal(const struct bitmask *bmp1, const struct bitmask *bmp2)
 			return 0;
 	return 1;
 }
+
+/* Hamming Weight: number of set bits */
+unsigned int numa_bitmask_weight(const struct bitmask *bmp)
+{
+	unsigned int i;
+	unsigned int w = 0;
+	for (i = 0; i < bmp->size; i++)
+		if (_getbit(bmp, i))
+			w++;
+	return w;
+}
+
 /* *****end of bitmask_  routines ************ */
 
 /* Next two can be overwritten by the application for different error handling */
@@ -249,19 +276,19 @@ WEAK void numa_warn(int num, char *fmt, ...)
 
 static void setpol(int policy, struct bitmask *bmp)
 { 
-	if (set_mempolicy(policy, bmp->maskp, bmp->size) < 0)
+	if (set_mempolicy(policy, bmp->maskp, bmp->size + 1) < 0)
 		numa_error("set_mempolicy");
 } 
 
 static void getpol(int *oldpolicy, struct bitmask *bmp)
 { 
-	if (get_mempolicy(oldpolicy, bmp->maskp, bmp->size, 0, 0) < 0)
+	if (get_mempolicy(oldpolicy, bmp->maskp, bmp->size + 1, 0, 0) < 0)
 		numa_error("get_mempolicy");
 } 
 
 static void dombind(void *mem, size_t size, int pol, struct bitmask *bmp)
 { 
-	if (mbind(mem, size, pol, bmp ? bmp->maskp : NULL, bmp ? bmp->size : 0, 
+	if (mbind(mem, size, pol, bmp ? bmp->maskp : NULL, bmp ? bmp->size + 1 : 0,
 		  mbind_flags) < 0)
 		numa_error("mbind"); 
 } 
@@ -280,13 +307,18 @@ int numa_pagesize(void)
 make_internal_alias(numa_pagesize);
 
 /*
- * Find the highest numbered existing memory node: maxconfigurednode.
+ * Find nodes (numa_nodes_ptr), nodes with memory (numa_memnode_ptr)
+ * and the highest numbered existing node (maxconfigurednode).
  */
 static void
 set_configured_nodes(void)
 {
 	DIR *d;
 	struct dirent *de;
+	long long freep;
+
+	numa_memnode_ptr = numa_allocate_nodemask();
+	numa_nodes_ptr = numa_allocate_nodemask();
 
 	d = opendir("/sys/devices/system/node");
 	if (!d) {
@@ -297,6 +329,9 @@ set_configured_nodes(void)
 			if (strncmp(de->d_name, "node", 4))
 				continue;
 			nd = strtoul(de->d_name+4, NULL, 0);
+			numa_bitmask_setbit(numa_nodes_ptr, nd);
+			if (numa_node_size64(nd, &freep) > 0)
+				numa_bitmask_setbit(numa_memnode_ptr, nd);
 			if (maxconfigurednode < nd)
 				maxconfigurednode = nd;
 		}
@@ -363,8 +398,7 @@ done:
 
 /*
  * Read a mask consisting of a sequence of hexadecimal longs separated by
- * commas. Order them correctly and return the number of the last bit
- * set.
+ * commas. Order them correctly and return the number of bits set.
  */
 static int
 read_mask(char *s, struct bitmask *bmp)
@@ -413,17 +447,10 @@ read_mask(char *s, struct bitmask *bmp)
 
 		bmp->maskp[m++] = x;
 	}
-	m--;
-
-	/* Poor mans fls() */
-	for(i = bitsperlong - 1; i >= 0; i--)
-		if (test_bit(i, bmp->maskp + m))
-			break;
-
 	/*
-	 * Return the last bit set
+	 * Return the number of bits set
 	 */
-	return bitsperlong * m + i;
+	return numa_bitmask_weight(bmp);
 }
 
 /*
@@ -431,7 +458,7 @@ read_mask(char *s, struct bitmask *bmp)
  * /proc/self/status.
  */
 static void
-set_thread_constraints(void)
+set_task_constraints(void)
 {
 	int hicpu = sysconf(_SC_NPROCESSORS_CONF)-1;
 	int i;
@@ -454,17 +481,10 @@ set_thread_constraints(void)
 		char  *mask = strrchr(buffer,'\t') + 1;
 
 		if (strncmp(buffer,"Cpus_allowed:",13) == 0)
-			maxproccpu = read_mask(mask, numa_all_cpus_ptr);
+			numproccpu = read_mask(mask, numa_all_cpus_ptr);
 
 		if (strncmp(buffer,"Mems_allowed:",13) == 0) {
-			maxprocnode =
-				read_mask(mask, numa_all_nodes_ptr);
-		}
-		if (strncmp(buffer,"Mems_allowed_list:",18) == 0) {
-			nodes_allowed_list = malloc(strlen(buffer)-18);
-			strncpy(nodes_allowed_list, buffer + 19,
-				strlen(buffer) - 19);
-			nodes_allowed_list[strlen(nodes_allowed_list)-1] = '\0';
+			numprocnode = read_mask(mask, numa_all_nodes_ptr);
 		}
 	}
 	fclose(f);
@@ -473,26 +493,26 @@ set_thread_constraints(void)
 	/*
 	 * Cpus_allowed in the kernel can be defined to all f's
 	 * i.e. it may be a superset of the actual available processors.
-	 * As such let's reduce maxproccpu to the number of actual
-	 * available cpus - 1.
+	 * As such let's reduce numproccpu to the number of actual
+	 * available cpus.
 	 */
-	if (maxproccpu <= 0) {
+	if (numproccpu <= 0) {
 		for (i = 0; i <= hicpu; i++)
 			numa_bitmask_setbit(numa_all_cpus_ptr, i);
-		maxproccpu = hicpu;
+		numproccpu = hicpu+1;
 	}
 
-	if (maxproccpu > hicpu) {
-		maxproccpu = hicpu;
+	if (numproccpu > hicpu+1) {
+		numproccpu = hicpu+1;
 		for (i=hicpu+1; i<numa_all_cpus_ptr->size; i++) {
 			numa_bitmask_clearbit(numa_all_cpus_ptr, i);
 		}
 	}
 
-	if (maxprocnode <= 0) {
+	if (numprocnode <= 0) {
 		for (i = 0; i <= maxconfigurednode; i++)
 			numa_bitmask_setbit(numa_all_nodes_ptr, i);
-		maxprocnode = maxconfigurednode;
+		numprocnode = maxconfigurednode + 1;
 	}
 
 	return;
@@ -533,7 +553,6 @@ set_numa_max_cpu(void)
 static void
 set_configured_cpus(void)
 {
-	int		filecount=0;
 	char		*dirnamep = "/sys/devices/system/cpu";
 	struct dirent	*dirent;
 	DIR		*dir;
@@ -545,15 +564,19 @@ set_configured_cpus(void)
 		return;
 	}
 	while ((dirent = readdir(dir)) != 0) {
-		if (!strncmp("cpu", dirent->d_name, 3)) {
-			filecount++;
-		} else {
-			continue;
+		if (dirent->d_type == DT_DIR
+		    && !strncmp("cpu", dirent->d_name, 3)) {
+			long cpu = strtol(dirent->d_name + 3, NULL, 10);
+
+			if (cpu < INT_MAX && cpu > maxconfiguredcpu)
+				maxconfiguredcpu = cpu;
 		}
 	}
 	closedir(dir);
-	maxconfiguredcpu = filecount-1; /* high cpu number */
-	return;
+	if (maxconfiguredcpu < 0) {
+		/* fall back to using the online cpu count */
+		maxconfiguredcpu = sysconf(_SC_NPROCESSORS_CONF) - 1;
+	}
 }
 
 /*
@@ -563,17 +586,31 @@ static void
 set_sizes(void)
 {
 	sizes_set++;
-	set_configured_nodes();	/* configured nodes listed in /sys */
 	set_nodemask_size();	/* size of kernel nodemask_t */
+	set_configured_nodes();	/* configured nodes listed in /sys */
 	set_numa_max_cpu();	/* size of kernel cpumask_t */
 	set_configured_cpus();	/* cpus listed in /sys/devices/system/cpu */
-	set_thread_constraints(); /* cpus and nodes for current thread */
+	set_task_constraints(); /* cpus and nodes for current task */
 }
 
 int
 numa_num_configured_nodes(void)
 {
-	return maxconfigurednode+1;
+	/*
+	* NOTE: this function's behavior matches the documentation (ie: it
+	* returns a count of nodes with memory) despite the poor function
+	* naming.  We also cannot use the similarly poorly named
+	* numa_all_nodes_ptr as it only tracks nodes with memory from which
+	* the calling process can allocate.  Think sparse nodes, memory-less
+	* nodes, cpusets...
+	*/
+	int memnodecount=0, i;
+
+	for (i=0; i <= maxconfigurednode; i++) {
+		if (numa_bitmask_isbitset(numa_memnode_ptr, i))
+			memnodecount++;
+	}
+	return memnodecount;
 }
 
 int
@@ -596,15 +633,33 @@ numa_num_possible_cpus(void)
 }
 
 int
+numa_num_task_nodes(void)
+{
+	return numprocnode;
+}
+
+/*
+ * for backward compatibility
+ */
+int
 numa_num_thread_nodes(void)
 {
-	return maxprocnode+1;
+	return numa_num_task_nodes();
 }
 
 int
+numa_num_task_cpus(void)
+{
+	return numproccpu;
+}
+
+/*
+ * for backward compatibility
+ */
+int
 numa_num_thread_cpus(void)
 {
-	return maxproccpu+1;
+	return numa_num_task_cpus();
 }
 
 /*
@@ -613,7 +668,7 @@ numa_num_thread_cpus(void)
 int
 numa_max_node(void)
 {
-	return numa_num_configured_nodes()-1;
+	return maxconfigurednode;
 }
 
 make_internal_alias(numa_max_node);
@@ -816,6 +871,23 @@ void *numa_alloc(size_t size)
 	return mem;
 } 
 
+void *numa_realloc(void *old_addr, size_t old_size, size_t new_size)
+{
+	char *mem;
+	mem = mremap(old_addr, old_size, new_size, MREMAP_MAYMOVE);
+	if (mem == (char *)-1)
+		return NULL;
+	/*
+	 *	The memory policy of the allocated pages is preserved by mremap(), so
+	 *	there is no need to (re)set it here. If the policy of the original
+	 *	allocation is not set, the new pages will be allocated according to the
+	 *	process' mempolicy. Trying to allocate explicitly the new pages on the
+	 *	same node as the original ones would require changing the policy of the
+	 *	newly allocated pages, which violates the numa_realloc() semantics.
+	 */ 
+	return mem;
+}
+
 void *numa_alloc_interleaved_subset_v1(size_t size, const nodemask_t *mask)
 {
 	char *mem;
@@ -1016,9 +1088,6 @@ copy_bitmask_to_bitmask(struct bitmask *bmpfrom, struct bitmask *bmpto)
 		memcpy(bmpto->maskp, bmpfrom->maskp, bytes);
 		memset(((char *)bmpto->maskp)+bytes, 0,
 					CPU_BYTES(bmpto->size)-bytes);
-	} else {
-		bytes = CPU_BYTES(bmpfrom->size);
-		memcpy(bmpto->maskp, bmpfrom->maskp, bytes);
 	}
 }
 
@@ -1075,7 +1144,7 @@ numa_get_membind_v2(void)
 } 
 __asm__(".symver numa_get_membind_v2,numa_get_membind@@libnuma_1.2");
 
-//TODO:  Cliff:  do I need a v1 nodemask_t version?
+//TODO:  do we need a v1 nodemask_t version?
 struct bitmask *numa_get_mems_allowed(void)
 {
 	struct bitmask *bmp;
@@ -1084,7 +1153,9 @@ struct bitmask *numa_get_mems_allowed(void)
 	 * can change, so query on each call.
 	 */
 	bmp = numa_allocate_nodemask();
-	getpol(NULL,  bmp);
+	if (get_mempolicy(NULL, bmp->maskp, bmp->size + 1, 0,
+				MPOL_F_MEMS_ALLOWED) < 0)
+		numa_error("get_mempolicy");
 	return bmp;
 }
 make_internal_alias(numa_get_mems_allowed);
@@ -1254,7 +1325,7 @@ int
 numa_node_to_cpus_v2(int node, struct bitmask *buffer)
 {
 	int err = 0, bufferlen;
-	int nnodes = numa_num_configured_nodes();
+	int nnodes = numa_max_node();
 	char fn[64], *line = NULL;
 	FILE *f; 
 	size_t len = 0; 
@@ -1264,7 +1335,7 @@ numa_node_to_cpus_v2(int node, struct bitmask *buffer)
 		init_node_cpu_mask_v2();
 
 	bufferlen = numa_bitmask_nbytes(buffer);
-	if (node > nnodes-1) {
+	if (node > nnodes) {
 		errno = ERANGE;
 		return -1;
 	}
@@ -1272,11 +1343,11 @@ numa_node_to_cpus_v2(int node, struct bitmask *buffer)
 
 	if (node_cpu_mask_v2[node]) {
 		/* have already constructed a mask for this node */
-		if (buffer->size != node_cpu_mask_v2[node]->size) {
+		if (buffer->size < node_cpu_mask_v2[node]->size) {
 			numa_error("map size mismatch; abort\n");
 			return -1;
 		}
-		memcpy(buffer->maskp, node_cpu_mask_v2[node]->maskp, bufferlen);
+		copy_bitmask_to_bitmask(node_cpu_mask_v2[node], buffer);
 		return 0;
 	}
 
@@ -1290,6 +1361,8 @@ numa_node_to_cpus_v2(int node, struct bitmask *buffer)
 		numa_warn(W_nosysfs2,
 		   "/sys not mounted or invalid. Assuming one node: %s",
 			  strerror(errno)); 
+		numa_warn(W_nosysfs2,
+		   "(cannot open or correctly parse %s)", fn);
 		numa_bitmask_setall(mask);
 		err = -1;
 	} 
@@ -1333,8 +1406,8 @@ int numa_node_of_cpu(int cpu)
 		return -1;
 	}
 	bmp = numa_bitmask_alloc(ncpus);
-	nnodes = numa_num_configured_nodes();
-	for (node = 0; node < nnodes; node++){
+	nnodes = numa_max_node();
+	for (node = 0; node <= nnodes; node++){
 		numa_node_to_cpus_v2_int(node, bmp);
 		if (numa_bitmask_isbitset(bmp, cpu)){
 			ret = node;
@@ -1422,6 +1495,15 @@ numa_run_on_node_mask_v2(struct bitmask *bmp)
 		if (bmp->maskp[i / BITS_PER_LONG] == 0)
 			continue;
 		if (numa_bitmask_isbitset(bmp, i)) {
+			/*
+			 * numa_all_nodes_ptr is cpuset aware; use only
+			 * these nodes
+			 */
+			if (!numa_bitmask_isbitset(numa_all_nodes_ptr, i)) {
+				numa_warn(W_noderunmask,
+					"node %d not allowed", i);
+				continue;
+			}
 			if (numa_node_to_cpus_v2_int(i, nodecpus) < 0) {
 				numa_warn(W_noderunmask, 
 					"Cannot read node cpumask from sysfs");
@@ -1501,6 +1583,13 @@ numa_get_run_node_mask_v2(void)
 
 	nodecpus = numa_allocate_cpumask();
 	for (i = 0; i <= max; i++) {
+		/*
+		 * numa_all_nodes_ptr is cpuset aware; show only
+		 * these nodes
+		 */
+		if (!numa_bitmask_isbitset(numa_all_nodes_ptr, i)) {
+			continue;
+		}
 		if (numa_node_to_cpus_v2_int(i, nodecpus) < 0) {
 			/* It's possible for the node to not exist */
 			continue;
@@ -1664,10 +1753,8 @@ static unsigned long get_nr(char *s, char **end, struct bitmask *bmp, int relati
 struct bitmask *
 numa_parse_nodestring(char *s)
 {
-	int maxnode = numa_max_node();
 	int invert = 0, relative = 0;
 	int conf_nodes = numa_num_configured_nodes();
-	int thread_nodes = numa_num_thread_nodes();
 	char *end;
 	struct bitmask *mask;
 
@@ -1686,12 +1773,10 @@ numa_parse_nodestring(char *s)
 		s++;
 	}
 	do {
-		unsigned long arg;
 		int i;
+		unsigned long arg;
 		if (!strcmp(s,"all")) {
-			int i;
-			for (i = 0; i < thread_nodes; i++)
-				numa_bitmask_setbit(mask, i);
+			copy_bitmask_to_bitmask(numa_all_nodes_ptr, mask);
 			s+=4;
 			break;
 		}
@@ -1700,7 +1785,7 @@ numa_parse_nodestring(char *s)
 			numa_warn(W_nodeparse, "unparseable node description `%s'\n", s);
 			goto err;
 		}
-		if (arg > maxnode) {
+		if (!numa_bitmask_isbitset(numa_all_nodes_ptr, arg)) {
 			numa_warn(W_nodeparse, "node argument %d is out of range\n", arg);
 			goto err;
 		}
@@ -1715,7 +1800,7 @@ numa_parse_nodestring(char *s)
 				numa_warn(W_nodeparse, "missing node argument %s\n", s);
 				goto err;
 			}
-			if (arg2 >= thread_nodes) {
+			if (!numa_bitmask_isbitset(numa_all_nodes_ptr, arg2)) {
 				numa_warn(W_nodeparse, "node argument %d out of range\n", arg2);
 				goto err;
 			}
@@ -1763,7 +1848,6 @@ numa_parse_cpustring(char *s)
 {
 	int invert = 0, relative=0;
 	int conf_cpus = numa_num_configured_cpus();
-	int thread_cpus = numa_num_thread_cpus();
 	char *end;
 	struct bitmask *mask;
 
@@ -1784,9 +1868,7 @@ numa_parse_cpustring(char *s)
 		int i;
 
 		if (!strcmp(s,"all")) {
-			int i;
-			for (i = 0; i < thread_cpus; i++)
-				numa_bitmask_setbit(mask, i);
+			copy_bitmask_to_bitmask(numa_all_cpus_ptr, mask);
 			s+=4;
 			break;
 		}
@@ -1795,7 +1877,7 @@ numa_parse_cpustring(char *s)
 			numa_warn(W_cpuparse, "unparseable cpu description `%s'\n", s);
 			goto err;
 		}
-		if (arg >= thread_cpus) {
+		if (!numa_bitmask_isbitset(numa_all_cpus_ptr, arg)) {
 			numa_warn(W_cpuparse, "cpu argument %s is out of range\n", s);
 			goto err;
 		}
@@ -1811,7 +1893,7 @@ numa_parse_cpustring(char *s)
 				numa_warn(W_cpuparse, "missing cpu argument %s\n", s);
 				goto err;
 			}
-			if (arg2 >= thread_cpus) {
+			if (!numa_bitmask_isbitset(numa_all_cpus_ptr, arg2)) {
 				numa_warn(W_cpuparse, "cpu argument %s out of range\n", s);
 				goto err;
 			}

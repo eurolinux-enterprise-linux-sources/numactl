@@ -29,9 +29,13 @@
 #include "util.h"
 #include "shm.h"
 
+#define CPUSET 0
+#define ALL 1
+
 int exitcode;
 
 struct option opts[] = {
+	{"all", 0, 0, 'a'},
 	{"interleave", 1, 0, 'i' },
 	{"preferred", 1, 0, 'p' },
 	{"cpubind", 1, 0, 'c' },
@@ -60,25 +64,32 @@ struct option opts[] = {
 void usage(void)
 {
 	fprintf(stderr,
-		"usage: numactl [--interleave=nodes] [--preferred=node]\n"
-		"               [--physcpubind=cpus] [--cpunodebind=nodes]\n"
-		"               [--membind=nodes] [--localalloc] command args ...\n"
-		"       numactl [--show]\n"
-		"       numactl [--hardware]\n"
-		"       numactl [--length length] [--offset offset] [--shmmode shmmode]\n"
-		"               [--strict]\n"
-		"               [--shmid id] --shm shmkeyfile | --file tmpfsfile\n"
-		"               [--huge] [--touch] \n"
-		"               memory policy | --dump | --dump-nodes\n"
+		"usage: numactl [--all | -a] [--interleave= | -i <nodes>] [--preferred= | -p <node>]\n"
+		"               [--physcpubind= | -C <cpus>] [--cpunodebind= | -N <nodes>]\n"
+		"               [--membind= | -m <nodes>] [--localalloc | -l] command args ...\n"
+		"       numactl [--show | -s]\n"
+		"       numactl [--hardware | -H]\n"
+		"       numactl [--length | -l <length>] [--offset | -o <offset>] [--shmmode | -M <shmmode>]\n"
+		"               [--strict | -t]\n"
+		"               [--shmid | -I <id>] --shm | -S <shmkeyfile>\n"
+		"               [--shmid | -I <id>] --file | -f <tmpfsfile>\n"
+		"               [--huge | -u] [--touch | -T] \n"
+		"               memory policy | --dump | -d | --dump-nodes | -D\n"
 		"\n"
-		"memory policy is --interleave, --preferred, --membind, --localalloc\n"
-		"nodes is a comma delimited list of node numbers or A-B ranges or all.\n"
-		"cpus is a comma delimited list of cpu numbers or A-B ranges or all\n"
+		"memory policy is --interleave | -i, --preferred | -p, --membind | -m, --localalloc | -l\n"
+		"<nodes> is a comma delimited list of node numbers or A-B ranges or all.\n"
+		"Instead of a number a node can also be:\n"
+		"  netdev:DEV the node connected to network device DEV\n"
+		"  file:PATH  the node the block device of path is connected to\n"
+		"  ip:HOST    the node of the network device host routes through\n"
+		"  block:PATH the node of block device path\n"
+		"  pci:[seg:]bus:dev[:func] The node of a PCI device\n"
+		"<cpus> is a comma delimited list of cpu numbers or A-B ranges or all\n"
 		"all ranges can be inverted with !\n"
 		"all numbers and ranges can be made cpuset-relative with +\n"
 		"the old --cpubind argument is deprecated.\n"
 		"use --cpunodebind or --physcpubind instead\n"
-		"length can have g (GB), m (MB) or k (KB) suffixes\n");
+		"<length> can have g (GB), m (MB) or k (KB) suffixes\n");
 	exit(1);
 }
 
@@ -180,8 +191,14 @@ char *fmt_mem(unsigned long long mem, char *buf)
 static void print_distances(int maxnode)
 {
 	int i,k;
+	int fst = 0;
 
-	if (numa_distance(maxnode,0) == 0) {
+	for (i = 0; i <= maxnode; i++)
+		if (numa_bitmask_isbitset(numa_nodes_ptr, i)) {
+			fst = i;
+			break;
+		}
+	if (numa_distance(maxnode,fst) == 0) {
 		printf("No distance information available.\n");
 		return;
 	}
@@ -315,6 +332,8 @@ int did_strict = 0;
 int do_shm = 0;
 int do_dump = 0;
 int shmattached = 0;
+int did_node_cpu_parse = 0;
+int parse_all = 0;
 char *shmoption;
 
 void check_cpubind(int flag)
@@ -342,6 +361,12 @@ void needshm(char *opt)
 		usage_msg("%s must be after shared memory specification", opt);
 }
 
+void check_all_parse(int flag)
+{
+	if (did_node_cpu_parse)
+		usage_msg("--all/-a option must be before all cpu/node specifications");
+}
+
 void get_short_opts(struct option *o, char *s)
 {
 	*s++ = '+';
@@ -354,6 +379,34 @@ void get_short_opts(struct option *o, char *s)
 		o++;
 	}
 	*s = '\0';
+}
+
+void check_shmbeyond(char *msg)
+{
+	if (shmoffset >= shmlen) {
+		fprintf(stderr,
+		"numactl: region offset %#llx beyond its length %#llx at %s\n",
+				shmoffset, shmlen, msg);
+		exit(1);
+	}
+}
+
+static struct bitmask *numactl_parse_nodestring(char *s, int flag)
+{
+	static char *last;
+
+	if (s[0] == 's' && !strcmp(s, "same")) {
+		if (!last)
+			usage_msg("same needs previous node specification");
+		s = last;
+	} else {
+		last = s;
+	}
+
+	if (flag == ALL)
+		return numa_parse_nodestring_all(s);
+	else
+		return numa_parse_nodestring(s);
 }
 
 int main(int ac, char **av)
@@ -376,13 +429,17 @@ int main(int ac, char **av)
 			exit(0);
 		case 'i': /* --interleave */
 			checknuma();
-			mask = numa_parse_nodestring(optarg);
+			if (parse_all)
+				mask = numactl_parse_nodestring(optarg, ALL);
+			else
+				mask = numactl_parse_nodestring(optarg, CPUSET);
 			if (!mask) {
 				printf ("<%s> is invalid\n", optarg);
 				usage();
 			}
 
 			errno = 0;
+			did_node_cpu_parse = 1;
 			setpolicy(MPOL_INTERLEAVE);
 			if (shmfd >= 0)
 				numa_interleave_memory(shmptr, shmlen, mask);
@@ -394,7 +451,10 @@ int main(int ac, char **av)
 		case 'c': /* --cpubind */
 			dontshm("-c/--cpubind/--cpunodebind");
 			checknuma();
-			mask = numa_parse_nodestring(optarg);
+			if (parse_all)
+				mask = numactl_parse_nodestring(optarg, ALL);
+			else
+				mask = numactl_parse_nodestring(optarg, CPUSET);
 			if (!mask) {
 				printf ("<%s> is invalid\n", optarg);
 				usage();
@@ -402,14 +462,18 @@ int main(int ac, char **av)
 			errno = 0;
 			check_cpubind(do_shm);
 			did_cpubind = 1;
-			numa_run_on_node_mask(mask);
+			did_node_cpu_parse = 1;
+			numa_run_on_node_mask_all(mask);
 			checkerror("sched_setaffinity");
 			break;
 		case 'C': /* --physcpubind */
 		{
 			struct bitmask *cpubuf;
 			dontshm("-C/--physcpubind");
-			cpubuf = numa_parse_cpustring(optarg);
+			if (parse_all)
+				cpubuf = numa_parse_cpustring_all(optarg);
+			else
+				cpubuf = numa_parse_cpustring(optarg);
 			if (!cpubuf) {
 				printf ("<%s> is invalid\n", optarg);
 				usage();
@@ -417,6 +481,7 @@ int main(int ac, char **av)
 			errno = 0;
 			check_cpubind(do_shm);
 			did_cpubind = 1;
+			did_node_cpu_parse = 1;
 			numa_sched_setaffinity(0, cpubuf);
 			checkerror("sched_setaffinity");
 			free(cpubuf);
@@ -425,12 +490,16 @@ int main(int ac, char **av)
 		case 'm': /* --membind */
 			checknuma();
 			setpolicy(MPOL_BIND);
-			mask = numa_parse_nodestring(optarg);
+			if (parse_all)
+				mask = numactl_parse_nodestring(optarg, ALL);
+			else
+				mask = numactl_parse_nodestring(optarg, CPUSET);
 			if (!mask) {
 				printf ("<%s> is invalid\n", optarg);
 				usage();
 			}
 			errno = 0;
+			did_node_cpu_parse = 1;
 			numa_set_bind_policy(1);
 			if (shmfd >= 0) {
 				numa_tonodemask_memory(shmptr, shmlen, mask);
@@ -443,7 +512,10 @@ int main(int ac, char **av)
 		case 'p': /* --preferred */
 			checknuma();
 			setpolicy(MPOL_PREFERRED);
-			mask = numa_parse_nodestring(optarg);
+			if (parse_all)
+				mask = numactl_parse_nodestring(optarg, ALL);
+			else
+				mask = numactl_parse_nodestring(optarg, CPUSET);
 			if (!mask) {
 				printf ("<%s> is invalid\n", optarg);
 				usage();
@@ -458,6 +530,7 @@ int main(int ac, char **av)
 				usage();
 			numa_bitmask_free(mask);
 			errno = 0;
+			did_node_cpu_parse = 1;
 			numa_set_bind_policy(0);
 			if (shmfd >= 0)
 				numa_tonode_memory(shmptr, shmlen, node);
@@ -478,13 +551,13 @@ int main(int ac, char **av)
 		case 'S': /* --shm */
 			check_cpubind(did_cpubind);
 			nopolicy();
-			attach_sysvshm(optarg);
+			attach_sysvshm(optarg, "--shm");
 			shmattached = 1;
 			break;
 		case 'f': /* --file */
 			check_cpubind(did_cpubind);
 			nopolicy();
-			attach_shared(optarg);
+			attach_shared(optarg, "--file");
 			shmattached = 1;
 			break;
 		case 'L': /* --length */
@@ -533,6 +606,7 @@ int main(int ac, char **av)
 
 		case 'T': /* --touch */
 			needshm("--touch");
+			check_shmbeyond("--touch");
 			numa_police_memory(shmptr, shmlen);
 			break;
 
@@ -540,6 +614,7 @@ int main(int ac, char **av)
 			needshm("--verify");
 			if (set_policy < 0)
 				complain("Need a policy first to verify");
+			check_shmbeyond("--verify");
 			numa_police_memory(shmptr, shmlen);
 			if (!mask)
 				complain("Need a mask to verify");
@@ -547,11 +622,15 @@ int main(int ac, char **av)
 				verify_shm(set_policy, mask);
 			break;
 
+		case 'a': /* --all */
+			check_all_parse(did_node_cpu_parse);
+			parse_all = 1;
+			break;
 		default:
 			usage();
 		}
 	}
-	
+
 	av += optind;
 	ac -= optind;
 

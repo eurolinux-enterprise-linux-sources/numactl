@@ -9,15 +9,6 @@ diff -up numactl-2.0.7/distance.c.orig numactl-2.0.7/distance.c
  
  	for (nd = 0;; nd++) {
  		char fn[100];
-@@ -64,7 +65,7 @@ static int read_distance_table(void)
- 		sprintf(fn, "/sys/devices/system/node/node%d/distance", nd);
- 		dfh = fopen(fn, "r");
- 		if (!dfh) {
--			if (errno == ENOENT && nd > 0)
-+			if (errno == ENOENT)
- 				err = 0;
- 			if (!err && nd<maxnode)
- 				continue;
 @@ -85,14 +86,15 @@ static int read_distance_table(void)
  		}
  

@@ -1,6 +1,7 @@
---- numactl-2.0.7/numactl.8.orig	2012-11-23 16:05:18.050460706 +0100
-+++ numactl-2.0.7/numactl.8		2012-11-23 16:12:20.539279712 +0100
-@@ -135,7 +135,11 @@ A !N-N notation indicates the inverse of
+diff -up numactl-2.0.9/numactl.8.orig numactl-2.0.9/numactl.8
+--- numactl-2.0.9/numactl.8.orig	2013-10-08 23:34:57.000000000 +0200
++++ numactl-2.0.9/numactl.8	2014-05-21 19:08:07.305962860 +0200
+@@ -159,7 +159,11 @@ A !N-N notation indicates the inverse of
  except N-N.  If used with + notation, specify !+N-N.
  .TP
  .B \-\-localalloc, \-l 

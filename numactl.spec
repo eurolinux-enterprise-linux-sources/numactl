@@ -1,24 +1,16 @@
 Name:		numactl
 Summary:	Library for tuning for Non Uniform Memory Access machines
-Version:	2.0.7
-Release:	8%{?dist}
+Version:	2.0.9
+Release:	2%{?dist}
 License:	LGPLv2/GPLv2
 Group: 		System Environment/Base
 URL:		ftp://oss.sgi.com/www/projects/libnuma/download
 Source0:	ftp://oss.sgi.com/www/projects/libnuma/download/numactl-%{version}.tar.gz
 Buildroot:	%{_tmppath}/%{name}-buildroot
 
-Patch0: numactl-2.0.7-distance-parsing.patch
-Patch1: numactl-2.0.7-no-nodes-warning.patch
-Patch2: numactl-2.0.7-numademo-msize-check.patch
-Patch3: numactl-2.0.7-numademo-alloc.patch
-Patch4: numactl-2.0.7-manpages.patch
-Patch5: numactl-2.0.7-nodes_allowed_list.patch
-Patch6: numactl-2.0.7-numa_num_possible_cpus.patch
-Patch7: numactl-2.0.7-miscalculate-conf-cpus.patch
-Patch8: numactl-2.0.7-numastat.patch
-Patch9: numactl-2.0.7-numastat-fix.patch
-Patch10:numactl-2.0.7-localalloc-man-option.patch
+Patch0: numactl-2.0.9-distance-parsing.patch
+Patch1: numactl-2.0.9-nodes_allowed_list.patch
+Patch2: numactl-2.0.9-localalloc-man-option.patch
 
 ExcludeArch: s390 s390x
 
@@ -40,14 +32,6 @@ Provides development headers for numa library calls
 %patch0 -p1
 %patch1 -p1
 %patch2 -p1
-%patch3 -p1
-%patch4 -p1
-%patch5 -p1
-%patch6 -p1
-%patch7 -p1
-%patch8 -p1
-%patch9 -p1
-%patch10 -p1
 
 %build
 make CFLAGS="$RPM_OPT_FLAGS -I."
@@ -89,6 +73,12 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/man3/*.3*
 
 %changelog
+* Thu May 22 2014 Petr Holasek <pholasek@redhat.com> - 2.0.9-2
+- Respin due to regression caused by rebase (bz1100134)
+
+* Wed May 21 2014 Petr Holasek <pholasek@redhat.com> - 2.0.9-1
+- Rebase to the 2.0.9 release (bz1017048)
+
 * Mon Aug 19 2013 Petr Holasek <pholasek@redhat.com> - 2.0.7-8
 - localalloc description (bz881779)
 

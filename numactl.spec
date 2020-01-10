@@ -1,7 +1,7 @@
 Name:		numactl
 Summary:	Library for tuning for Non Uniform Memory Access machines
 Version:	2.0.7
-Release:	6%{?dist}
+Release:	8%{?dist}
 License:	LGPLv2/GPLv2
 Group: 		System Environment/Base
 URL:		ftp://oss.sgi.com/www/projects/libnuma/download
@@ -17,6 +17,8 @@ Patch5: numactl-2.0.7-nodes_allowed_list.patch
 Patch6: numactl-2.0.7-numa_num_possible_cpus.patch
 Patch7: numactl-2.0.7-miscalculate-conf-cpus.patch
 Patch8: numactl-2.0.7-numastat.patch
+Patch9: numactl-2.0.7-numastat-fix.patch
+Patch10:numactl-2.0.7-localalloc-man-option.patch
 
 ExcludeArch: s390 s390x
 
@@ -44,6 +46,8 @@ Provides development headers for numa library calls
 %patch6 -p1
 %patch7 -p1
 %patch8 -p1
+%patch9 -p1
+%patch10 -p1
 
 %build
 make CFLAGS="$RPM_OPT_FLAGS -I."
@@ -85,6 +89,17 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/man3/*.3*
 
 %changelog
+* Mon Aug 19 2013 Petr Holasek <pholasek@redhat.com> - 2.0.7-8
+- localalloc description (bz881779)
+
+* Wed Aug 14 2013 Anton Arapov <anton@redhat.com> - 2.0.7-7
+- numastat.c: fix bug preventing correct static huge page quantities
+- numastat.c: update version number
+- numastat.8: remove redundant "interleave hit" description
+- numastat.8: remove extraneous leading spaces and blank lines
+- numastat.8: enhance explanation of correct placement for "-s" option
+- Resolves: rhbz#987507
+
 * Tue Oct 16 2012 Petr Holasek <pholasek@redhat.com> - 2.0.7-6
 - Added new rewritten numastat utility (bz829896)
 

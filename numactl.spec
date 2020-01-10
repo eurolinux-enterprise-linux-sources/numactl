@@ -1,7 +1,7 @@
 Name:		numactl
 Summary:	Library for tuning for Non Uniform Memory Access machines
 Version:	2.0.7
-Release:	3%{dist}
+Release:	6%{?dist}
 License:	LGPLv2/GPLv2
 Group: 		System Environment/Base
 URL:		ftp://oss.sgi.com/www/projects/libnuma/download
@@ -14,6 +14,9 @@ Patch2: numactl-2.0.7-numademo-msize-check.patch
 Patch3: numactl-2.0.7-numademo-alloc.patch
 Patch4: numactl-2.0.7-manpages.patch
 Patch5: numactl-2.0.7-nodes_allowed_list.patch
+Patch6: numactl-2.0.7-numa_num_possible_cpus.patch
+Patch7: numactl-2.0.7-miscalculate-conf-cpus.patch
+Patch8: numactl-2.0.7-numastat.patch
 
 ExcludeArch: s390 s390x
 
@@ -38,6 +41,9 @@ Provides development headers for numa library calls
 %patch3 -p1
 %patch4 -p1
 %patch5 -p1
+%patch6 -p1
+%patch7 -p1
+%patch8 -p1
 
 %build
 make CFLAGS="$RPM_OPT_FLAGS -I."
@@ -79,6 +85,16 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/man3/*.3*
 
 %changelog
+* Tue Oct 16 2012 Petr Holasek <pholasek@redhat.com> - 2.0.7-6
+- Added new rewritten numastat utility (bz829896)
+
+* Fri Oct 5 2012 Petr Holasek <pholasek@redhat.com> - 2.0.7-5
+- Fixed %{?dist} in spec file (bz805965), it caused test fails
+
+* Thu Oct 4 2012 Petr Holasek <pholasek@redhat.com> - 2.0.7-4
+- Symbol numa_num_possible_cpus exported (bz804827)
+- miscalculating of numa_num_configured_cpus was fixed (bz804480)
+
 * Thu Mar 22 2012 Anton Arapov <anton@rehdat.com> - 2.0.7-3
 - Bring back the legacy export to prevent the ABI change.
 

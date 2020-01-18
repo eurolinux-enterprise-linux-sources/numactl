@@ -109,18 +109,10 @@
 
 #define __NR_migrate_pages	272
 
-#elif defined(__arm__)
-/* https://bugs.debian.org/796802 */
-#warning "ARM does not implement the migrate_pages() syscall"
-
 #elif !defined(DEPS_RUN)
 #error "Add syscalls for your architecture or update kernel headers"
 #endif
 
-#endif
-
-#ifndef __GLIBC_PREREQ
-# define __GLIBC_PREREQ(x,y) 0
 #endif
 
 #if defined(__GLIBC__) && __GLIBC_PREREQ(2, 11)
@@ -189,9 +181,8 @@ long syscall6(long call, long a, long b, long c, long d, long e, long f)
 #define syscall6 syscall
 #endif
 
-long WEAK get_mempolicy(int *policy, unsigned long *nmask,
-				unsigned long maxnode, void *addr,
-				unsigned flags)
+long WEAK get_mempolicy(int *policy, const unsigned long *nmask,
+				unsigned long maxnode, void *addr, int flags)
 {
 	return syscall(__NR_get_mempolicy, policy, nmask,
 					maxnode, addr, flags);
@@ -215,12 +206,7 @@ long WEAK set_mempolicy(int mode, const unsigned long *nmask,
 long WEAK migrate_pages(int pid, unsigned long maxnode,
 	const unsigned long *frommask, const unsigned long *tomask)
 {
-#if defined(__NR_migrate_pages)
 	return syscall(__NR_migrate_pages, pid, maxnode, frommask, tomask);
-#else
-    errno = ENOSYS;
-    return -1;
-#endif
 }
 
 long WEAK move_pages(int pid, unsigned long count,

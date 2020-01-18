@@ -3,3 +3,4 @@ enum {
 };
 
 int resolve_affinity(const char *id, struct bitmask *mask);
+

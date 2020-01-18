@@ -106,7 +106,7 @@ void usage_msg(char *msg, ...)
 void show_physcpubind(void)
 {
 	int ncpus = numa_num_configured_cpus();
-
+	
 	for (;;) {
 		struct bitmask *cpubuf;
 
@@ -119,7 +119,7 @@ void show_physcpubind(void)
 			}
 			err("sched_get_affinity");
 		}
-		printmask("physcpubind", cpubuf);
+		printcpumask("physcpubind", cpubuf);
 		break;
 	}
 }
@@ -130,7 +130,8 @@ void show(void)
 	struct bitmask *membind, *interleave, *cpubind;
 	unsigned long cur;
 	int policy;
-
+	int numa_num_nodes = numa_num_possible_nodes();
+	
 	if (numa_available() < 0) {
 		show_physcpubind();
 		printf("No NUMA support available on this system.\n");
@@ -149,7 +150,7 @@ void show(void)
 		perror("get_mempolicy");
 
 	printf("policy: %s\n", policy_name(policy));
-
+		
 	printf("preferred node: ");
 	switch (policy) {
 	case MPOL_PREFERRED:
@@ -165,7 +166,7 @@ void show(void)
 		printf("%ld (interleave next)\n",cur);
 		break;
 	case MPOL_BIND:
-		printf("%d\n", find_first(membind));
+		printf("%d\n", find_first_bit(&membind, numa_num_nodes));
 		break;
 	}
 	if (policy == MPOL_INTERLEAVE) {
@@ -183,7 +184,7 @@ char *fmt_mem(unsigned long long mem, char *buf)
 	if (mem == -1L)
 		sprintf(buf, "<not available>");
 	else
-		sprintf(buf, "%llu MB", mem >> 20);
+		sprintf(buf, "%Lu MB", mem >> 20);
 	return buf;
 }
 
@@ -216,7 +217,7 @@ static void print_distances(int maxnode)
 			    numa_bitmask_isbitset(numa_nodes_ptr, k))
 				printf("% 3d ", numa_distance(i,k));
 		printf("\n");
-	}
+	}			
 }
 
 void print_node_cpus(int node)
@@ -241,11 +242,6 @@ void hardware(void)
 	int prevnode=-1;
 	int skip=0;
 	int maxnode = numa_max_node();
-
-	if (numa_available() < 0) {
-                printf("No NUMA available on this system\n");
-                exit(1);
-        }
 
 	for (i=0; i<=maxnode; i++)
 		if (numa_bitmask_isbitset(numa_nodes_ptr, i))
@@ -350,7 +346,7 @@ void noshm(char *opt)
 {
 	if (shmattached)
 		usage_msg("%s must be before shared memory specification", opt);
-	shmoption = opt;
+	shmoption = opt;		
 }
 
 void dontshm(char *opt)
@@ -606,7 +602,7 @@ int main(int ac, char **av)
 		case 'o':  /* --offset */
 			noshm("--offset");
 			shmoffset = memsize(optarg);
-			break;
+			break;			
 
 		case 'T': /* --touch */
 			needshm("--touch");
@@ -653,7 +649,7 @@ int main(int ac, char **av)
 
 	if (shmoption)
 		usage_msg("shm related option %s for process", shmoption);
-
+	
 	if (*av == NULL)
 		usage();
 	execvp(*av, av);

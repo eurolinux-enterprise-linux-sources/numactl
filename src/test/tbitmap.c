@@ -7,19 +7,13 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include "numa.h"
-#include "util.h"
-
-/* For util.c. Fixme. */
-void usage(void)
-{
-	exit(1);
-}
 
 #define ALIGN(x,a) (((x)+(a)-1)&~((a)-1))
 
 #define test_bit(i,p)  ((p)[(i) / BITS_PER_LONG] &   (1UL << ((i)%BITS_PER_LONG)))
 #define set_bit(i,p)   ((p)[(i) / BITS_PER_LONG] |=  (1UL << ((i)%BITS_PER_LONG)))
 #define clear_bit(i,p) ((p)[(i) / BITS_PER_LONG] &= ~(1UL << ((i)%BITS_PER_LONG)))
+
 
 typedef unsigned u32;
 #define BITS_PER_LONG (sizeof(long)*8)
@@ -87,12 +81,11 @@ int main(void)
 		numa_bitmask_clearall(mask);
 		numa_bitmask_clearall(mask2);
 		numa_bitmask_setbit(mask, i);
-		assert(find_first(mask) == i);
 		bitmap_scnprintf(buf, sizeof(buf), mask);
 		strcat(buf,"\n");
 		if (numa_parse_bitmap(buf, mask2) < 0)
 			assert(0);
-		if (memcmp(mask->maskp, mask2->maskp, numa_bitmask_nbytes(mask))) {
+		if (memcmp(mask, mask2, sizeof(mask))) { 
 			bitmap_scnprintf(buf, sizeof(buf), mask2);
 			printf("mask2 differs: %s\n", buf);
 			assert(0);

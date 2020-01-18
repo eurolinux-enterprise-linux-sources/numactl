@@ -40,11 +40,9 @@
 #include <linux/rtnetlink.h>
 #include <linux/netlink.h>
 #include <sys/types.h>
-#include <sys/sysmacros.h>
 #include <ctype.h>
 #include <assert.h>
 #include <regex.h>
-#include <sys/sysmacros.h>
 #include "numa.h"
 #include "numaint.h"
 #include "sysfs.h"
@@ -75,7 +73,7 @@ static int node_parse_failure(int ret, char *cls, const char *dev)
 
 /* Generic sysfs class lookup */
 static int
-affinity_class(struct bitmask *mask, char *cls, const char *dev)
+affinity_class(struct bitmask *mask, char *cls, const const char *dev)
 {
 	int ret;
 	while (isspace(*dev))
@@ -122,6 +120,7 @@ affinity_class(struct bitmask *mask, char *cls, const char *dev)
 	return 0;
 }
 
+
 /* Turn file (or device node) into class name */
 static int affinity_file(struct bitmask *mask, char *cls, const char *file)
 {
@@ -130,7 +129,7 @@ static int affinity_file(struct bitmask *mask, char *cls, const char *file)
 	int n;
 	unsigned maj = 0, min = 0;
 	dev_t d;
-	struct dirent *dep;
+	struct dirent de, *dep;
 
 	cls = "block";
 	char fn[sizeof("/sys/class/") + strlen(cls)];
@@ -154,10 +153,8 @@ static int affinity_file(struct bitmask *mask, char *cls, const char *file)
 			  cls);
 		return -1;
 	}
-	while ((dep = readdir(dir)) != NULL) {
+	while (readdir_r(dir, &de, &dep) == 0 && dep) {
 		char *name = dep->d_name;
-		int ret;
-
 		if (*name == '.')
 			continue;
 		char *dev;
@@ -180,9 +177,8 @@ static int affinity_file(struct bitmask *mask, char *cls, const char *file)
 		if (major(d) != maj || minor(d) != min)
 			continue;
 
-		ret = affinity_class(mask, "block", name);
 		closedir(dir);
-		return ret;
+		return affinity_class(mask, "block", name);
 	}
 	closedir(dir);
 	numa_warn(W_blockdev5, "Cannot find block device %x:%x in sysfs for `%s'",
@@ -345,3 +341,4 @@ hidden int resolve_affinity(const char *id, struct bitmask *mask)
 	}
 	return NO_IO_AFFINITY;
 }
+

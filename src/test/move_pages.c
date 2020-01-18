@@ -99,3 +99,4 @@ int main(int argc, char **argv)
 
 	return errors > 0 ? 1 : 0;
 }
+

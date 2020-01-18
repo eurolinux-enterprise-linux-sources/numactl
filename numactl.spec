@@ -1,20 +1,21 @@
 Name:		numactl
 Summary:	Library for tuning for Non Uniform Memory Access machines
-Version:	2.0.12
-Release:	3%{?dist}.1
+Version:	2.0.9
+Release:	5%{?dist}
 # libnuma is LGPLv2 and GPLv2
 # numactl binaries are GPLv2 only
 License:	GPLv2
 Group:		System Environment/Base
-URL:            https://github.com/numactl/numactl
-Source0:        https://github.com/numactl/numactl/releases/download/%{version}/numactl-%{version}.tar.gz
+URL:		ftp://oss.sgi.com/www/projects/libnuma/download
+Source0:	ftp://oss.sgi.com/www/projects/libnuma/download/numactl-%{version}.tar.gz
 Buildroot:	%{_tmppath}/%{name}-buildroot
-BuildRequires:  libtool automake autoconf
 
 ExcludeArch: s390 s390x %{arm}
 
-Patch1: numactl-2.0.12-numastat-when-reading-no-exist-pid-return-EXIT_FAILU.patch
-Patch2: numactl-2.0.12-Fix-crashes-when-using-the-touch-option.patch
+Patch1: numactl-2.0.8-localalloc-man.patch
+Patch2: numactl-2.0.9-hw-detect-segfault.patch
+Patch3: numactl-2.0.9-mpol-bind-preferred.patch
+Patch4: numactl-2.0.10-numa_node_to_cpu_skip_over_nonexisting.patch
 
 %description
 Simple NUMA policy support. It consists of a numactl program to run
@@ -43,16 +44,24 @@ Provides development headers for numa library calls
 %setup -q -n %{name}-%{version}
 %patch1 -p1
 %patch2 -p1
+%patch3 -p1
+%patch4 -p1
 
 %build
-%configure --prefix=/usr --libdir=%{_libdir}
 make clean
 make CFLAGS="$RPM_OPT_FLAGS -I."
 
 %install
 rm -rf $RPM_BUILD_ROOT
+mkdir -p $RPM_BUILD_ROOT%{_bindir}
+mkdir -p $RPM_BUILD_ROOT%{_libdir}
+mkdir -p $RPM_BUILD_ROOT%{_includedir}
+mkdir -p $RPM_BUILD_ROOT%{_mandir}/man8
 
-make DESTDIR=$RPM_BUILD_ROOT install
+make prefix=$RPM_BUILD_ROOT/usr libdir=$RPM_BUILD_ROOT/%{_libdir} install
+
+%clean
+rm -rf $RPM_BUILD_ROOT
 
 %post -p /sbin/ldconfig
 %post libs -p /sbin/ldconfig
@@ -61,7 +70,8 @@ make DESTDIR=$RPM_BUILD_ROOT install
 %postun libs -p /sbin/ldconfig
 
 %files
-%doc README.md
+%defattr(-,root,root,-)
+%doc README
 %{_bindir}/numactl
 %{_bindir}/numademo
 %{_bindir}/numastat
@@ -69,42 +79,27 @@ make DESTDIR=$RPM_BUILD_ROOT install
 %{_bindir}/migspeed
 %{_bindir}/migratepages
 %{_mandir}/man8/*.8*
-%exclude %{_mandir}/man2/*.2*
 
 %files libs
-%{_libdir}/libnuma.so.1.0.0
+%defattr(-,root,root,-)
 %{_libdir}/libnuma.so.1
 
 %files devel
+%defattr(-,root,root,-)
 %{_libdir}/libnuma.so
-%{_libdir}/pkgconfig/numa.pc
 %exclude %{_libdir}/libnuma.a
-%exclude %{_libdir}/libnuma.la
 %{_includedir}/numa.h
 %{_includedir}/numaif.h
 %{_includedir}/numacompat1.h
 %{_mandir}/man3/*.3*
 
 %changelog
-* Thu Oct 17 2019 Pingfan Liu <piliu@redhat.com> - 2.0.12-3.1
-- Fix crashes when using the "--touch" option
-
-* Sat Jun  1 2019 Pingfan Liu <piliu@redhat.com> - 2.0.12-3
-- numastat: bail out if reading no-exist pid
-
-* Fri May 31 2019 Pingfan Liu <piliu@redhat.com> - 2.0.12-2
-- numastat: when reading no-exist pid, return EXIT_FAILURE
-- Rebase to numactl-2.0.12
-
-* Tue Aug 8 2017 Petr Oros <poros@redhat.com> - 2.0.9-7
-- Segment fault when numa nodes not sequential or contiguous
-- Resolves: #1219445
-
-* Mon Dec 14 2015 Petr Holasek <pholasek@redhat.com> - 2.0.9-6
-- confusing warning supressed (bz1270734)
+* Wed Aug 05 2015 Scientific Linux Auto Patch Process <SCIENTIFIC-LINUX-DEVEL@LISTSERV.FNAL.GOV>
+- Eliminated rpmbuild "bogus date" error due to inconsistent weekday,
+  by assuming the date is correct and changing the weekday.
 
 * Wed Jul 01 2015 Petr Holasek <pholasek@redhat.com> - 2.0.9-5
-- numa_node_to_cpu skips over non-existing nodes (bz1180415)
+- numa_node_to_cpu skips over non-existing nodes (bz1238282)
 
 * Mon Nov 10 2014 Petr Holasek <pholasek@redhat.com> - 2.0.9-4
 - Fixed missing question mark in dist macro

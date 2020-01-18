@@ -44,3 +44,4 @@ void mt_refill(void)
         s = TWIST(b, MT_LEN-1, 0);
         b[MT_LEN-1] = b[MT_IA-1] ^ (s >> 1) ^ MAGIC(s);
 }
+

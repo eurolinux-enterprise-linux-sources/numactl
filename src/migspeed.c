@@ -65,6 +65,7 @@ int main(int argc, char *argv[])
 {
 	char *p;
 	int option;
+	int error = 0;
 	struct timespec result;
 	unsigned long bytes;
 	double duration, mbytes;
@@ -81,7 +82,8 @@ int main(int argc, char *argv[])
 	switch (option) {
 	case 'h' :
 	case '?' :
-		usage();
+		error = 1;
+		break;
 	case 'v' :
 		verbose++;
 		break;
@@ -185,3 +187,4 @@ int main(int argc, char *argv[])
 			mbytes / duration);
 	return 0;
 }
+

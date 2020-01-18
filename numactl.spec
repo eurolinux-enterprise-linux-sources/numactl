@@ -1,7 +1,7 @@
 Name:		numactl
 Summary:	Library for tuning for Non Uniform Memory Access machines
 Version:	2.0.9
-Release:	5%{?dist}
+Release:	6%{?dist}
 # libnuma is LGPLv2 and GPLv2
 # numactl binaries are GPLv2 only
 License:	GPLv2
@@ -16,6 +16,7 @@ Patch1: numactl-2.0.8-localalloc-man.patch
 Patch2: numactl-2.0.9-hw-detect-segfault.patch
 Patch3: numactl-2.0.9-mpol-bind-preferred.patch
 Patch4: numactl-2.0.10-numa_node_to_cpu_skip_over_nonexisting.patch
+Patch5: numactl-2.0.11-libnuma-supress-warnings-for-non-existing-node.patch
 
 %description
 Simple NUMA policy support. It consists of a numactl program to run
@@ -46,6 +47,7 @@ Provides development headers for numa library calls
 %patch2 -p1
 %patch3 -p1
 %patch4 -p1
+%patch5 -p1
 
 %build
 make clean
@@ -94,12 +96,11 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/man3/*.3*
 
 %changelog
-* Wed Aug 05 2015 Scientific Linux Auto Patch Process <SCIENTIFIC-LINUX-DEVEL@LISTSERV.FNAL.GOV>
-- Eliminated rpmbuild "bogus date" error due to inconsistent weekday,
-  by assuming the date is correct and changing the weekday.
+* Mon Dec 14 2015 Petr Holasek <pholasek@redhat.com> - 2.0.9-6
+- confusing warning supressed (bz1270734)
 
 * Wed Jul 01 2015 Petr Holasek <pholasek@redhat.com> - 2.0.9-5
-- numa_node_to_cpu skips over non-existing nodes (bz1238282)
+- numa_node_to_cpu skips over non-existing nodes (bz1180415)
 
 * Mon Nov 10 2014 Petr Holasek <pholasek@redhat.com> - 2.0.9-4
 - Fixed missing question mark in dist macro

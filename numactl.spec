@@ -1,7 +1,7 @@
 Name:		numactl
 Summary:	Library for tuning for Non Uniform Memory Access machines
 Version:	2.0.12
-Release:	3%{?dist}
+Release:	3%{?dist}.1
 # libnuma is LGPLv2 and GPLv2
 # numactl binaries are GPLv2 only
 License:	GPLv2
@@ -14,6 +14,7 @@ BuildRequires:  libtool automake autoconf
 ExcludeArch: s390 s390x %{arm}
 
 Patch1: numactl-2.0.12-numastat-when-reading-no-exist-pid-return-EXIT_FAILU.patch
+Patch2: numactl-2.0.12-Fix-crashes-when-using-the-touch-option.patch
 
 %description
 Simple NUMA policy support. It consists of a numactl program to run
@@ -41,6 +42,7 @@ Provides development headers for numa library calls
 %prep
 %setup -q -n %{name}-%{version}
 %patch1 -p1
+%patch2 -p1
 
 %build
 %configure --prefix=/usr --libdir=%{_libdir}
@@ -84,6 +86,9 @@ make DESTDIR=$RPM_BUILD_ROOT install
 %{_mandir}/man3/*.3*
 
 %changelog
+* Thu Oct 17 2019 Pingfan Liu <piliu@redhat.com> - 2.0.12-3.1
+- Fix crashes when using the "--touch" option
+
 * Sat Jun  1 2019 Pingfan Liu <piliu@redhat.com> - 2.0.12-3
 - numastat: bail out if reading no-exist pid
 
